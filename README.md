@@ -1,0 +1,2 @@
+# okulhesap
+Okul Yatırım Simulasyonu
