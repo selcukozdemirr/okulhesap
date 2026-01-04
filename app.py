@@ -1,70 +1,53 @@
 import streamlit as st
 import pandas as pd
 
-st.set_page_config(page_title="Okul Yatırım Simülatörü", layout="wide")
+st.set_page_config(page_title="Özel Okul Finansal Simülatör", layout="wide")
 
-st.title("🏫 Özel Okul Yatırım ve Finansal Simülasyon Motoru")
-st.sidebar.header("⚙️ Simülasyon Ayarları")
+st.title("📊 Özel Okul Yatırım Hesaplama Motoru")
+st.markdown("Excel'deki tüm değerleri aşağıdaki tablolardan anlık olarak değiştirebilirsiniz.")
 
-# 1. KADEMELER VE AKTİVASYON
-st.sidebar.subheader("Kademeleri Seçin")
-anaokulu = st.sidebar.checkbox("Anaokulu", value=True)
-ilkokul = st.sidebar.checkbox("İlkokul", value=True)
-ortaokul = st.sidebar.checkbox("Ortaokul", value=True)
-lise = st.sidebar.checkbox("Lise (Aktif/Pasif)", value=False)
+# --- SIDEBAR: GENEL AYARLAR ---
+st.sidebar.header("Global Çarpanlar")
+ssk_carpani = st.sidebar.number_input("SSK ve Vergi Çarpanı (Brüt/Net Oranı)", value=1.6, step=0.1) #
+stopaj_orani = st.sidebar.number_input("Stopaj Oranı (Birim)", value=0.06, step=0.01) #
 
-# 2. GİRDİLER (Sliderlar)
-st.sidebar.subheader("Finansal Parametreler")
-ogrenci_ucreti = st.sidebar.slider("Yıllık Eğitim Ücreti (TL)", 150000, 600000, 350000)
-ogretmen_maas = st.sidebar.slider("Ortalama Öğretmen Maaşı (Net/TL)", 30000, 80000, 45000)
-doluluk_orani = st.sidebar.slider("Okul Doluluk Oranı (%)", 10, 100, 60)
+# --- 1. KADEME VE ÖĞRENCİ HESAPLARI ---
+st.subheader("1. Sınıf Seviyeleri ve Öğrenci Kapasitesi")
+# Excel'deki SINIF SEVİYESİ, ŞUBE ve ORTALAMA FİYAT mantığı
+kapasite_data = {
+    "Sınıf Seviyesi": ["Anaokulu", "1. Sınıf", "2. Sınıf", "3. Sınıf", "4. Sınıf", "5. Sınıf", "6. Sınıf", "7. Sınıf", "8. Sınıf", "9. Sınıf (Lise)", "10. Sınıf (Lise)", "11. Sınıf (Lise)", "12. Sınıf (Lise)"],
+    "Şube Sayısı": [3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0, 0, 0], # Lise başlangıçta 0
+    "Öğrenci Sayısı": [60, 60, 60, 60, 60, 60, 60, 60, 60, 0, 0, 0, 0],
+    "Ortalama Fiyat (Yıllık)": [300000] * 13
+}
+df_kapasite = pd.DataFrame(kapasite_data)
+edited_kapasite = st.data_editor(df_kapasite, num_rows="dynamic")
 
-# 3. HESAPLAMA MANTIĞI (Senin Excel verilerine göre)
-sube_sayisi = 3
-mevcut = 20
-toplam_kapasite = 0
-aktif_kademeler = []
+# --- 2. PERSONEL VE MAAŞ DAĞILIMI ---
+st.subheader("2. İdari, Öğretmen ve Yardımcı Personel Dağılımı")
+# Excel'deki Branş ve Personel Dağılımı
+personel_data = {
+    "Görev/Branş": ["Müdür", "Müdür Yrd.", "Sınıf Öğretmeni", "Matematik", "Türkçe", "Fen Bilgisi", "İngilizce", "Rehberlik", "Memur/Muhasebe", "Temizlik/Güvenlik", "Aşçı"],
+    "Personel Sayısı": [1, 2, 12, 4, 4, 4, 6, 2, 3, 6, 2],
+    "Ortalama Net Maaş": [70000, 60000, 45000, 45000, 45000, 45000, 48000, 50000, 35000, 25000, 30000]
+}
+df_personel = pd.DataFrame(personel_data)
+edited_personel = st.data_editor(df_personel, num_rows="dynamic")
 
-if anaokulu: 
-    toplam_kapasite += 1 * sube_sayisi * mevcut
-    aktif_kademeler.append("Anaokulu")
-if ilkokul: 
-    toplam_kapasite += 4 * sube_sayisi * mevcut
-    aktif_kademeler.append("İlkokul")
-if ortaokul: 
-    toplam_kapasite += 4 * sube_sayisi * mevcut
-    aktif_kademeler.append("Ortaokul")
-if lise: 
-    toplam_kapasite += 4 * sube_sayisi * mevcut
-    aktif_kademeler.append("Lise")
+# --- HESAPLAMALAR ---
+# Gelir Hesaplama
+toplam_gelir = (edited_kapasite["Öğrenci Sayısı"] * edited_kapasite["Ortalama Fiyat (Yıllık)"]).sum()
 
-mevcut_ogrenci = int(toplam_kapasite * (doluluk_orani / 100))
+# Gider Hesaplama (Maaşlar + SSK + Stopaj)
+edited_personel["Aylık Toplam Maliyet"] = edited_personel["Personel Sayısı"] * edited_personel["Ortalama Net Maaş"] * ssk_carpani
+yillik_personel_gideri = edited_personel["Aylık Toplam Maliyet"].sum() * 12
 
-# Personel Sayıları (Senin CSV'den esinlenerek)
-mudur_sayisi = 1
-mudur_yrd_sayisi = 3 if (ortaokul or lise) else 1
-yardimci_personel = 10 # Temizlik, Güvenlik, Aşçı
-
-# ÖĞRETMEN NORM HESABI
-toplam_saat = (len(aktif_kademeler) * 4 * sube_sayisi * 45) # Basitleştirilmiş
-ogretmen_sayisi = round(toplam_saat / 22)
-
-# FİNANSAL TABLO
-yillik_gelir = mevcut_ogrenci * ogrenci_ucreti
-personel_gideri = (ogretmen_sayisi * ogretmen_maas * 1.6 * 12) + (yardimci_personel * 35000 * 1.4 * 12)
-kar = yillik_gelir - personel_gideri
-
-# EKRAN ÇIKTILARI
-col1, col2, col3 = st.columns(3)
-col1.metric("Toplam Öğrenci", mevcut_ogrenci)
-col2.metric("Gereken Öğretmen", ogretmen_sayisi)
-col3.metric("Tahmini Yıllık Kâr", f"{kar:,.0f} TL")
-
+# --- ÇIKTILAR (METRİKLER) ---
 st.divider()
-st.subheader("📊 Branş Bazlı Dağılım ve Risk Analizi")
-st.info(f"Seçili Kademeler: {', '.join(aktif_kademeler)}")
+c1, c2, c3 = st.columns(3)
+c1.metric("Toplam Yıllık Gelir", f"{toplam_gelir:,.0f} TL")
+c2.metric("Yıllık Personel Gideri", f"{yillik_personel_gideri:,.0f} TL")
+c3.metric("Net Faaliyet Kârı (Bina Hariç)", f"{toplam_gelir - yillik_personel_gideri:,.0f} TL")
 
-if kar < 0:
-    st.error("⚠️ DİKKAT: Mevcut doluluk oranıyla okul zarar ediyor! Ücretleri veya doluluğu artırın.")
-else:
-    st.success("✅ Okul şu an operasyonel olarak kârda görünüyor.")
+# Detaylı Gider Analizi Grafiği
+st.bar_chart(edited_personel.set_index("Görev/Branş")["Aylık Toplam Maliyet"])
